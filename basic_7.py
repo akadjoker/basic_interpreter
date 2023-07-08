@@ -14,6 +14,7 @@ TK_DIV = 'DIV'
 TK_POW = 'POW' # ^
 TK_MOD = 'MOD' # %
 TK_EQ  =  'EQ' # =
+TK_NEWLINE = 'NEWLINE'
 
 TK_COMMA = 'COMMA' # ,     
 TK_SEMICOLON = 'SEMICOLON' #;
@@ -200,6 +201,7 @@ class Lexer:
                 if self.current_char == '\n':
                     self.line += 1
                     self.column = 0
+                    token = Token(TK_NEWLINE, ' ', self.line, self.column)
                 self.skip_whitespace()
                 continue
             
@@ -345,6 +347,9 @@ class UnaryOpNode:
     def __repr__(self):
         return f'({self.op}, {self.node})'
     
+class ListNode:
+    def __init__(self, node_list):
+        self.node_list = node_list
 
 class IfNode:
     def __init__(self, cases, else_case):
@@ -594,15 +599,6 @@ class Parser:
             print('Exiting...')
             exit(1)
         
-        #aqui podmeos voltar a atribuição de variaveis    
-        # if self.current_token.type == TK_IDENTIFIER:
-        #     var_name = self.current_token
-        #     self.advance()
-        #     if self.current_token.type != TK_EQ:
-        #         self.error("Expected '=' at Line: {}, Col: {}".format(self.current_token.line, self.current_token.column+1))
-        #     self.advance()
-        #     node = self.expr()
-        #     return VarAssignNode(var_name, node)
 
         if self.current_token.match(TK_KEYWORD,'var'):
             self.advance()
@@ -616,15 +612,39 @@ class Parser:
             node = self.expr()
             return VarAssignNode(var_name, node)
 
+        if self.current_token.type == TK_IDENTIFIER:
+            var_name = self.current_token
+            self.advance()
+            if self.current_token.type == TK_EQ:
+                self.advance()
+                node = self.expr()
+                return VarAssignNode(var_name, node)
+            else:
+                return VarAccessNode(var_name)
+            
         node = self.bin_op(self.comp_expr, ((TK_KEYWORD, 'and'), (TK_KEYWORD, 'or')))        
         return node
     
+    def statements(self):
+        results = []
+        while self.current_token.type != 'EOF':
+            results.append(self.expr())
+        if self.current_token.type == TK_NEWLINE:
+            self.advance()  # ignore the newline
+        elif self.current_token.type != 'EOF':
+            self.error("Expected newline at Line: {}, Col: {}".format(self.current_token.line, self.current_token.column+1))
+        return ListNode(results)
+
+    def block(self):
+        results = []
+        while self.current_token.type != 'EOF':
+            results.append(self.expr())
+        if self.current_token.type == TK_NEWLINE:
+            self.advance()  # ignore the newline
+        return ListNode(results)
+    
     def parse(self):
-        res= self.expr()
-        if self.current_token.type != 'EOF':
-            
-            self.error("(parse)  at Line: {}, Col: {}  {} ".format(self.current_token.line, self.current_token.column+1, self.current_token))
-        return res
+        return self.statements()
     
     def bin_op(self, fun_a, ops, func_b=None):
         if  func_b ==None:
@@ -801,6 +821,12 @@ class Interpreter:
         #print("visit_NumberNode")
         return Number(node.value, node.line, node.column)
     
+    def visit_ListNode(self, node):
+        exp=[]
+        for child_node in node.node_list:
+            exp.append(self.visit(child_node))
+        return exp
+
     def visit_BinOpNode(self, node):
         #print("visit_BinOpNode")
         left = self.visit(node.left)
@@ -885,25 +911,6 @@ global_symbol_table.set("true", Number(1))
 global_symbol_table.set("false", Number(0))
 
 
-# while True:
-#     try:
-#         text = input('basic> ')
-#     except EOFError:
-#         break
-#     if not text:
-#         continue
-    
-#     lexer = Lexer(text)
-#     tokens = lexer.get_next_token()
-#     parser = Parser(tokens)
-    
-#     context = Context('<program>')
-#     context.symbol_table = global_symbol_table
-
-
-#     interpreter = Interpreter(parser, context)
-#     re = interpreter.interpret()
-#     print(re)
 
 def run(text):
     lexer = Lexer(text)
@@ -922,3 +929,7 @@ def run(text):
 text = open("main.bas", "r").read()
 re = run(text)
 print(re)
+
+for key, value in global_symbol_table.vars.items():
+    print(f"Key: {key}, Value: {value}")
+
